@@ -4,7 +4,7 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 
 // Size of the maze
-static DIM: usize = 4;
+static DIM: usize = 16;
 
 // Code words for the four possible directions
 static BASE: u8 = 2;
@@ -14,7 +14,7 @@ static U2D: u8 = BASE.pow(2); // code for possible "up to down" move
 static D2U: u8 = BASE.pow(3); // code for possible "down to up" move
 
 // Random seed
-static USE_RANDOM_SEED: bool = true;
+static USE_RANDOM_SEED: bool = false;
 static SEED: u64 = 421;
 
 
@@ -31,11 +31,9 @@ fn main() {
     StdRng::from_entropy()
   };
 
-  /*
-  // Random choice for the entrance and the goal (TODO)
+  // Random choice for the entrance and the goal
   let pos_entrance = rng.gen_range(0..DIM);
   let pos_goal = rng.gen_range(0..DIM);
-  */
 
   // Random choice for the first separation
   let orientation = if rng.gen_range(0..2) > 0 {
@@ -47,7 +45,138 @@ fn main() {
   // Uppermost call to the recursive process
   create_wall_with_door(&mut maze, 0, DIM-1, 0, DIM-1, &orientation, &mut rng);
 
-  println!("---\nFinal maze:\n{}", maze);
+  println!("---\nFinal maze:\n{}\n", maze);
+
+  println!("Orientation: {}, Entrance: {}, Goal: {}", orientation, pos_entrance, pos_goal);
+
+  // Draw the maze in ascii-art
+  draw_maze_in_ascii(&maze, &orientation, &pos_entrance, &pos_goal);
+
+}
+
+
+// ----------------------------------------------------------------
+fn draw_maze_in_ascii(maze: &Array2<u8>, orientation: &bool, pos_entrance: &usize, pos_goal: &usize) {
+
+  for y in 0..DIM {
+    for x in 0..DIM {
+
+      // Check for entrance
+      let e: &str = if *orientation && x == *pos_entrance && y == 0 {
+        "  "
+      } else {
+        "##"
+      };
+      print_ascii_line(maze[[y, x]], 0, e);
+    }
+
+    print!("#\n");
+
+    for x in 0..DIM {
+
+      // Check for entrance
+      let f: &str = if !*orientation && y == *pos_entrance && x == 0 {
+        " "
+      } else {
+        "#"
+      };
+      print_ascii_line(maze[[y, x]], 1, f);
+    }
+
+    // Check for goal
+    if !*orientation && y == *pos_goal {
+      print!(" \n");
+    } else {
+      print!("#\n");
+    }
+  }
+
+  for x in 0..DIM {
+
+    // Check for goal
+    if *orientation && x == *pos_goal {
+      print!("#  ");
+    } else {
+      print!("###");
+    }
+  }
+
+  print!("#\n");
+}
+
+
+// ----------------------------------------------------------------
+fn print_ascii_line(code: u8, line: u8, c: &str) {
+
+  /*
+  // Annotate each cell with its codename
+  let b: u8 = code % 10;
+  let a: u8 = (code - b) / 10;
+  */
+
+  if code == 1 && line == 0 {
+    print!("#{}", c);
+  } else if code == 1 && line == 1 {
+    print!("{}  ", c); // {}{}", a, b);
+  } else if code == 2 && line == 0 {
+    print!("#{}", c);
+  } else if code == 2 && line == 1 {
+    print!("   "); // {}{}", a, b);
+  } else if code == 3 && line == 0 {
+    print!("#{}", c);
+  } else if code == 3 && line == 1 {
+    print!("   "); // {}{}", a, b);
+  } else if code == 4 && line == 0 {
+    print!("#{}", c);
+  } else if code == 4 && line == 1 {
+    print!("{}  ", c); // {}{}", a, b);
+  } else if code == 5 && line == 0 {
+    print!("#{}", c);
+  } else if code == 5 && line == 1 {
+    print!("{}  ", c); // {}{}", a, b);
+  } else if code == 6 && line == 0 {
+    print!("#{}", c);
+  } else if code == 6 && line == 1 {
+    print!("   "); // {}{}", a, b);
+  } else if code == 7 && line == 0 {
+    print!("#{}", c);
+  } else if code == 7 && line == 1 {
+    print!("   "); // {}{}", a, b);
+  } else if code == 8 && line == 0 {
+    print!("#  ");
+  } else if code == 8 && line == 1 {
+    print!("{}  ", c); // {}{}", a, b);
+  } else if code == 9 && line == 0 {
+    print!("#  ");
+  } else if code == 9 && line == 1 {
+    print!("{}  ", c); // {}{}", a, b);
+  } else if code == 10 && line == 0 {
+    print!("#  ");
+  } else if code == 10 && line == 1 {
+    print!("   "); // {}{}", a, b);
+  } else if code == 11 && line == 0 {
+    print!("#  ");
+  } else if code == 11 && line == 1 {
+    print!("   "); // {}{}", a, b);
+  } else if code == 12 && line == 0 {
+    print!("#  ");
+  } else if code == 12 && line == 1 {
+    print!("{}  ", c); // {}{}", a, b);
+  } else if code == 13 && line == 0 {
+    print!("#  ");
+  } else if code == 13 && line == 1 {
+    print!("{}  ", c); // {}{}", a, b);
+  } else if code == 14 && line == 0 {
+    print!("#  ");
+  } else if code == 14 && line == 1 {
+    print!("   "); // {}{}", a, b);
+  } else if code == 15 && line == 0 {
+    print!("#  ");
+  } else if code == 15 && line == 1 {
+    print!("   "); // {}{}", a, b);
+  } else {
+    print!("???");
+  }
 }
 
 
