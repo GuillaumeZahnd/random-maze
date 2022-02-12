@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 ndarray = "0.15.4"
 rand = "0.8.4"
+colored = "2.0.0"
