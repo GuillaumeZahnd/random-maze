@@ -10,11 +10,14 @@ use colored::Colorize;
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 // Size of the maze
-static DIM: usize = 7;
+static DIM: usize = 42;
 
 // Random seed
-static USE_RANDOM_SEED: bool = false;
-static SEED: u64 = 101;
+static USE_RANDOM_SEED: bool = true;
+static SEED: u64 = 11;
+
+// Maze orientation ("horizontal", "vertical", "random")
+static MAZE_ORIENTATION: &'static str = "random";
 
 // Intermediate display
 static SHOW_GENERATION_PROCESS: bool = false;
@@ -33,6 +36,8 @@ static U2D: u8 = BASE.pow(2); // (:=4) code for possible "up to down" move
 static D2U: u8 = BASE.pow(3); // (:=8) code for possible "down to up" move
 
 // Symbols to draw the maze in ASCII-art
+static BUG_SYMB: &'static str = "?"; // TODO
+static HEY_SYMB: &'static str = "%"; // TODO
 static ENT_SYMB: &'static str = "◆"; // ("E") entrance
 static GOA_SYMB: &'static str = "♥"; // ("G") goal
 static WAL_SYMB: &'static str = "■"; // ("#") wall
@@ -62,14 +67,14 @@ static HEX_E_SYMB: &'static str = "E"; // hexadecimal code for a possible move
 static HEX_F_SYMB: &'static str = "F"; // hexadecimal code for a possible move
 
 // The purpose using these integer codes is that they can be stored in an array, and link to the corresponding string
-static ENT_CODE: u8 = 100; // entrance
-static GOA_CODE: u8 = 101; // goal
-static WAL_CODE: u8 = 102; // wall
-static OPN_CODE: u8 = 103; // opening
-static NOD_CODE: u8 = 104; // node
-static ALV_CODE: u8 = 105; // node in the alive region
-static NAR_CODE: u8 = 106; // node in the narrow band
-static FAR_CODE: u8 = 107; // node in the far away region
+static BUG_CODE: u8 = 0; // TODO
+static HEY_CODE: u8 = 77; // TODO
+static WAL_CODE: u8 = 100; // wall
+static OPN_CODE: u8 = 101; // opening
+static NOD_CODE: u8 = 102; // node
+static ALV_CODE: u8 = 103; // node in the alive region
+static NAR_CODE: u8 = 104; // node in the narrow band
+static FAR_CODE: u8 = 105; // node in the far away region
 static PATH_L2R_CODE: u8 = 200; // node corresponding to a "left to right" move of the shortest path
 static PATH_R2L_CODE: u8 = 201; // node corresponding to a "right to left" move of the shortest path
 static PATH_U2D_CODE: u8 = 202; // node corresponding to an "up to down" move of the shortest path
@@ -100,21 +105,30 @@ struct Pos {
 // ----------------------------------------------------------------
 fn main() {
 
-  // Create a DIM*DIM array
+  // Create a DIM*DIM maze array
   let mut maze = Array2::<u8>::zeros((DIM, DIM));
+  let mut wallz = Array2::<u8>::zeros((DIM, DIM));
 
-  // Create a random number generator
+  // Create a pseudo-random number generator
   let mut rng: StdRng = if USE_RANDOM_SEED {
     SeedableRng::seed_from_u64(SEED)
   } else {
     StdRng::from_entropy()
   };
 
-  // Random choice for the first separation
-  let orientation = if rng.gen_range(0..2) > 0 {
-    true // vertical
+  // Determine the maze orientation (true: horizontal; false: vertical)
+  let orientation = if MAZE_ORIENTATION == "horizontal" {
+    true
+  } else if MAZE_ORIENTATION == "vertical" {
+    false
+  } else if MAZE_ORIENTATION == "random" {
+    if rng.gen_range(0..2) > 0 {
+      true
+    } else {
+      false
+    }
   } else {
-    false // horizontal
+    panic!("Impossible orientation");
   };
 
   // Random choice for the entrance
@@ -131,8 +145,14 @@ fn main() {
     Pos{x: rng.gen_range(0..DIM), y: DIM-1} // goal on the bottom-side wall
   };
 
-  // Create the maze: uppermost call to the recursive process
-  create_wall_with_door(&mut maze, 0, DIM-1, 0, DIM-1, &orientation, &mut rng);
+  // Create the maze: uppermost call to the recursive process (independent of the position of the entrance and goal)
+  if SHOW_GENERATION_PROCESS {
+    let pos_dummy = Pos{x: DIM, y: DIM}; // Unreachable position for the entrance and goal, so they are not displayed
+    print_maze_in_ascii(&maze, &orientation, &pos_dummy, &pos_dummy, &maze);
+  }
+  let mut nb_iter_create: usize = 0;
+  create_wall_with_door(&mut maze, &mut wallz, 0, DIM-1, 0, DIM-1, &orientation, &mut nb_iter_create, &mut rng);
+  println!("Maze generated in {} iterations", nb_iter_create);
 
   // Print the naked maze in ascii
   let symbol_code = get_codenames_for_naked_maze();
@@ -147,30 +167,99 @@ fn main() {
 
 
 // ----------------------------------------------------------------
+// TODO --> Description
+// The implicit stop condition for this recursive process is: "wall_max == wall_min && door_max == door_min"
+fn create_wall_with_door(
+  maze: &mut Array2<u8>, wallz: &mut Array2<u8>, wall_min: usize, wall_max: usize, door_min: usize, door_max: usize, orientation: &bool,
+  nb_iter_create: &mut usize, rng: &mut StdRng) {
+
+  // Increment the number of iterations
+  *nb_iter_create += 1;
+
+  // Subdivide the room
+  if wall_max > wall_min {
+
+    // Randomly determine the wall position
+    let wall_pos = rng.gen_range(wall_min..wall_max);
+    let wall_pos_plus_one = wall_pos +1;
+
+    // Randomly determine the door position
+    let door_pos = if door_max > door_min {
+      rng.gen_range(door_min..door_max)
+    } else {
+      door_min
+    };
+
+    if *orientation {
+      wallz[[wall_pos, door_pos]] = HEY_CODE;
+    } else {
+      wallz[[door_pos, wall_pos]] = HEY_CODE
+    }
+
+    // Determine the code-word for the bi-directional move through the door in function of the current orientation
+    match orientation {
+      true => { // vertical separation, horizontal move
+        maze[[door_pos, wall_pos]] += L2R;
+        maze[[door_pos, wall_pos +1]] += R2L;
+      },
+      false => { // horizontal separation, vertical move
+        maze[[wall_pos, door_pos]] += U2D;
+        maze[[wall_pos +1, door_pos]] += D2U;
+      }
+    }
+
+    // Display the intermediate steps
+    if SHOW_GENERATION_PROCESS {
+      println!(
+        "[generation] iteration: {} | orientation: {} | wall: [{}, {}] --> {} | door: [{}, {}] --> {}",
+        nb_iter_create, orientation, wall_min, wall_max, wall_pos, door_min, door_max, door_pos);
+      let pos_dummy = Pos{x: DIM, y: DIM}; // Unreachable position for the entrance and goal, so they are not displayed
+      print_maze_in_ascii(&wallz, &orientation, &pos_dummy, &pos_dummy, &wallz);
+    }
+
+
+    // Two recursive calls, on the regions in both sides of the wall
+    if door_max > door_min {
+      // Call with flipped orientation: the room is large enough to be subdivided along the other orientation
+      create_wall_with_door(maze, wallz, door_min, door_max, wall_min, wall_pos, &!orientation, nb_iter_create, rng);
+      create_wall_with_door(maze, wallz, door_min, door_max, wall_pos_plus_one, wall_max, &!orientation, nb_iter_create, rng);
+    } else if door_max == door_min {
+      // Call with same orientation: the room cannot be subdivided along the other orientation
+      create_wall_with_door(maze, wallz, wall_min, wall_pos, door_min, door_max, &orientation, nb_iter_create, rng);
+      create_wall_with_door(maze, wallz, wall_pos_plus_one, wall_max, door_min, door_max, &orientation, nb_iter_create, rng);
+    }
+
+  // Recursive call on the same room with flipped orientation
+  } else if wall_max == wall_min && door_max > door_min {
+    create_wall_with_door(maze, wallz, door_min, door_max, wall_min, wall_max, &!orientation, nb_iter_create, rng);
+  }
+
+}
+
+
+// ----------------------------------------------------------------
 // Random search on the narrow band (not a depth-first search, not a breadth-first search, not a cost-first search)
 fn solve_maze(maze: &Array2<u8>, pos_entrance: &Pos, pos_goal: &Pos, orientation: &bool, rng: &mut StdRng) {
 
-  let mut alive = Array2::<u8>::zeros((DIM, DIM)).mapv(|_| false);
-  let mut narrow = Array2::<u8>::zeros((DIM, DIM)).mapv(|_| false);
-  let mut far = Array2::<u8>::zeros((DIM, DIM)).mapv(|_| true);
+  let mut alv_region = Array2::<u8>::zeros((DIM, DIM)).mapv(|_| false);
+  let mut nar_region = Array2::<u8>::zeros((DIM, DIM)).mapv(|_| false);
+  let mut far_region = Array2::<u8>::zeros((DIM, DIM)).mapv(|_| true);
   let mut vec_narrow = vec![];
-  let mut backtracking = Array2::<u8>::zeros((DIM, DIM));
   let mut backtracking_x = Array2::<usize>::zeros((DIM, DIM));
   let mut backtracking_y = Array2::<usize>::zeros((DIM, DIM));
-  let mut vec_backtracking = vec![];
   let mut goal_has_been_reached: bool = false;
   let mut nb_iter_solve: usize = 0;
 
   vec_narrow.push(Pos{x: pos_entrance.x, y: pos_entrance.y});
-  narrow[[pos_entrance.y, pos_entrance.x]] = true;
-  far[[pos_entrance.y, pos_entrance.x]] = false;
+  nar_region[[pos_entrance.y, pos_entrance.x]] = true;
+  far_region[[pos_entrance.y, pos_entrance.x]] = false;
 
   while !goal_has_been_reached {
 
     nb_iter_solve += 1;
 
     // Select a node from the narrow region
-    let idx_cell = if narrow[[pos_goal.y, pos_goal.x]] {
+    let idx_cell = if nar_region[[pos_goal.y, pos_goal.x]] {
       // Select the goal, if the goal is in the narrow region
       vec_narrow.iter().position(|r| r.x == pos_goal.x && r.y == pos_goal.y).unwrap()
     } else {
@@ -180,142 +269,137 @@ fn solve_maze(maze: &Array2<u8>, pos_entrance: &Pos, pos_goal: &Pos, orientation
 
     let pos = Pos{x: vec_narrow[idx_cell].x, y: vec_narrow[idx_cell].y};
 
-    alive[[pos.y, pos.x]]= !alive[[pos.y, pos.x]]; // Switch from "false" to "true"
-    narrow[[pos.y, pos.x]]= !narrow[[pos.y, pos.x]]; // Switch from "true" to "false"
+    alv_region[[pos.y, pos.x]]= !alv_region[[pos.y, pos.x]]; // Switch from "false" to "true"
+    nar_region[[pos.y, pos.x]]= !nar_region[[pos.y, pos.x]]; // Switch from "true" to "false"
     vec_narrow.remove(idx_cell);
 
     // Trigger the end of the search
-    if alive[[pos_goal.y, pos_goal.x]] {
+    if alv_region[[pos_goal.y, pos_goal.x]] {
       goal_has_been_reached = true;
-      println!(
-        "Maze solved in {} iteration ({}% of the nodes have been visited)", nb_iter_solve, 100*nb_iter_solve/(DIM*DIM));
     }
 
     // Update the narrow band and the far away region in function of the new alive node
     let mut v = get_possible_moves(&maze, &pos);
-    v = refine_moves_based_on_far_region(v, &far);
+    v = refine_moves_based_on_far_region(v, &far_region);
     let nb_possible_moves = v.iter().len();
     if nb_possible_moves > 0 {
       for idx in 0..nb_possible_moves {
-        if far[[v[idx].y, v[idx].x]] {
-          far[[v[idx].y, v[idx].x]] = !far[[v[idx].y, v[idx].x]];
-          narrow[[v[idx].y, v[idx].x]] = !narrow[[v[idx].y, v[idx].x]];
+        if far_region[[v[idx].y, v[idx].x]] {
+          far_region[[v[idx].y, v[idx].x]] = !far_region[[v[idx].y, v[idx].x]];
+          nar_region[[v[idx].y, v[idx].x]] = !nar_region[[v[idx].y, v[idx].x]];
           vec_narrow.push(Pos{x: v[idx].x, y: v[idx].y});
           backtracking_x[[v[idx].y, v[idx].x]] = pos.x;
           backtracking_y[[v[idx].y, v[idx].x]] = pos.y;
         }
       }
     }
-
     // Display the front propagation
     if SHOW_SOLVING_PROCESS {
-      let symbol_code = get_codenames_for_alv_nar_far_regions(&alive, &narrow, &far);
+      println!("[solving] iteration: {} | alive region: {}% | narrow band: {}% | far-away region: {}%",
+      nb_iter_solve,
+      100*count_nb_of_true(&alv_region)/(DIM*DIM),
+      100*count_nb_of_true(&nar_region)/(DIM*DIM),
+      100*count_nb_of_true(&far_region)/(DIM*DIM));
+      let symbol_code = get_codenames_for_alv_nar_far_regions(&alv_region, &nar_region, &far_region);
       print_maze_in_ascii(&maze, &orientation, &pos_entrance, &pos_goal, &symbol_code);
     }
-
+  }
+  // Display only the last step of the front propagation
+  if !SHOW_SOLVING_PROCESS {
+    println!(
+      "[solving] Maze solved in {} iteration ({}% of the nodes have been visited)", nb_iter_solve, 100*nb_iter_solve/(DIM*DIM));
+    let symbol_code = get_codenames_for_alv_nar_far_regions(&alv_region, &nar_region, &far_region);
+    print_maze_in_ascii(&maze, &orientation, &pos_entrance, &pos_goal, &symbol_code);
   }
 
-  // Backtracking
+  conduct_backtracking(&maze, &backtracking_x, &backtracking_y, &pos_entrance, &pos_goal, &orientation);
+}
+
+
+// ----------------------------------------------------------------
+// Extract the (unique and therefore shortest) path from the entrance to the goal via backtracking
+fn conduct_backtracking(
+  maze: &Array2<u8>, backtracking_x: &Array2<usize>, backtracking_y: &Array2<usize>, pos_entrance: &Pos, pos_goal: &Pos,
+  orientation: &bool) {
+
+  // Initialize the backtracking array with a generic nodes
+  let mut backtracking = Array2::<u8>::zeros((DIM, DIM));
   for y in 0..DIM {
     for x in 0..DIM {
       backtracking[[y, x]] = NOD_CODE;
     }
   }
-  let symbol_code = get_codenames_for_alv_nar_far_regions(&alive, &narrow, &far);
-  print_maze_in_ascii(&maze, &orientation, &pos_entrance, &pos_goal, &symbol_code);
-  backtracking[[pos_goal.y, pos_goal.x]] = if *orientation { // TODO there is a borrow here
+
+  // Start at the goal position
+  let mut path_length: usize = 1;
+  let mut pos_current = Pos{x: pos_goal.x, y: pos_goal.y};
+  let mut shortest_path = vec![];
+  shortest_path.push(Pos{x: pos_current.x, y: pos_current.y});
+  backtracking[[pos_current.y, pos_current.x]] = if *orientation {
     PATH_L2R_CODE
   } else {
     PATH_U2D_CODE
   };
-  vec_backtracking.push(Pos{x: pos_goal.x, y: pos_goal.y});
-  let mut cont: bool = true;
-  let mut current_pos = Pos{x: pos_goal.x, y: pos_goal.y};
-  while cont {
-    if current_pos.x == pos_entrance.x && current_pos.y == pos_entrance.y {
-      cont = false;
+
+  // Iteratively backtrack the path from the goal to the entrance using the connections stored during front propagation
+  let mut entrance_has_been_reached: bool = false;
+  while !entrance_has_been_reached {
+
+    // Check if entrance has been reached, otherwise continue the bactracking
+    if pos_current.x == pos_entrance.x && pos_current.y == pos_entrance.y {
+      entrance_has_been_reached = true;
     } else {
+      path_length += 1;
 
       // Retrieve the previous position
-      let mut previous_pos = Pos{
-        x: backtracking_x[[current_pos.y, current_pos.x]], y: backtracking_y[[current_pos.y, current_pos.x]]};
+      let pos_prev = Pos{
+        x: backtracking_x[[pos_current.y, pos_current.x]], y: backtracking_y[[pos_current.y, pos_current.x]]};
 
-      // Encode the path direction (either L2R, R2L, U2D, or D2U) in the backtracking array
-      backtracking[[previous_pos.y, previous_pos.x]] = if current_pos.x == previous_pos.x +1 && current_pos.y == previous_pos.y {
+      // Encode the path direction (either L2R:">", R2L:"<", U2D:"v", or D2U:"^") in the backtracking array
+      backtracking[[pos_prev.y, pos_prev.x]] = if pos_current.x == pos_prev.x +1 && pos_current.y == pos_prev.y {
         PATH_L2R_CODE
-      } else if previous_pos.x > 0 && current_pos.x == previous_pos.x -1 && current_pos.y == previous_pos.y {
+      } else if pos_prev.x > 0 && pos_current.x == pos_prev.x -1 && pos_current.y == pos_prev.y {
         PATH_R2L_CODE
-      } else if current_pos.x == previous_pos.x && current_pos.y == previous_pos.y +1 {
+      } else if pos_current.x == pos_prev.x && pos_current.y == pos_prev.y +1 {
         PATH_U2D_CODE
-      } else if previous_pos.y > 0 && current_pos.x == previous_pos.x && current_pos.y == previous_pos.y -1 {
+      } else if pos_prev.y > 0 && pos_current.x == pos_prev.x && pos_current.y == pos_prev.y -1 {
         PATH_D2U_CODE
       } else {
         panic!("Impossible path");
       };
 
       // Update the current position
-      current_pos = previous_pos;
+      pos_current = pos_prev;
 
-      // Update the backtracking vector // TODO --> This is currently not used
-      vec_backtracking.push(Pos{x: current_pos.x, y: current_pos.y});
+      // Update the backtracking vector
+      shortest_path.push(Pos{x: pos_current.x, y: pos_current.y});
     }
   }
+
+  // Print the maze with the shortest path
+  println!("[backtracking] path length: {}", path_length);
   print_maze_in_ascii(&maze, &orientation, &pos_entrance, &pos_goal, &backtracking);
 
-}
-
-
-// ----------------------------------------------------------------
-fn refine_moves_based_on_far_region(mut v: Vec<Pos>, far: &Array2<bool>) -> Vec<Pos> {
-  let mut idx_remove_proof = 0;
-  for _idx in 0..v.iter().len() {
-    if !far[[v[idx_remove_proof].y, v[idx_remove_proof].x]] {
-      v.remove(idx_remove_proof);
-    } else {
-      idx_remove_proof +=1;
+  // Reverse the order of the path so it goes from the entrance to the goal, and print the step-by-step solution
+  shortest_path.reverse();
+  for idx in 0..path_length {
+    if idx % 10 == 0 {
+      print!("\n");
     }
+    print!("{}:({},{}) ", idx, shortest_path[idx].x, shortest_path[idx].y);
   }
-  v
-}
+  print!("\n");
 
-
-// ----------------------------------------------------------------
-fn get_codenames_for_naked_maze() -> Array2<u8> {
-  let mut codenames = Array2::<u8>::zeros((DIM, DIM));
-  for y in 0..DIM {
-    for x in 0..DIM {
-      codenames[[y, x]] = NOD_CODE;
-    }
-  }
-  codenames
-}
-
-
-// ----------------------------------------------------------------
-fn get_codenames_for_alv_nar_far_regions(alive: &Array2<bool>, narrow: &Array2<bool>, far: &Array2<bool>) -> Array2<u8> {
-  let mut codenames = Array2::<u8>::zeros((DIM, DIM));
-  for y in 0..DIM {
-    for x in 0..DIM {
-      codenames[[y, x]] = if alive[[y, x]] {
-          ALV_CODE
-        } else if narrow[[y, x]] {
-          NAR_CODE
-        } else if far[[y, x]] {
-          FAR_CODE
-        } else {
-          panic!("Impossible configuration");
-        };
-    }
-  }
-  codenames
 }
 
 
 // ----------------------------------------------------------------
 fn print_maze_in_ascii(
   maze: &Array2<u8>, orientation: &bool, pos_entrance: &Pos, pos_goal: &Pos, symbol_code: &Array2<u8>) {
-  //alive: &Array2<bool>, narrow: &Array2<bool>, far: &Array2<bool>) {
+  //alv_region: &Array2<bool>, nar_region: &Array2<bool>, far_region: &Array2<bool>) {
   for y in 0..DIM {
+
+    // Line 0
     for x in 0..DIM {
       // Check for entrance
       let opn_or_wal: &str = if !*orientation && x == pos_entrance.x && y == 0 {
@@ -323,20 +407,36 @@ fn print_maze_in_ascii(
       } else {
         WAL_SYMB
       };
-       print_node_in_ascii(maze[[y, x]], 0, opn_or_wal, WAL_SYMB);
+
+      let generate_symb: &str = if maze[[y, x]] == 0 && y > 0 {
+        HEY_SYMB
+      } else {
+        WAL_SYMB
+      };
+
+       //print_node_in_ascii(maze[[y, x]], 0, opn_or_wal, WAL_SYMB);
+       print_node_in_ascii(maze[[y, x]], 0, opn_or_wal, generate_symb);
     }
     print!("{}\n", WAL_SYMB);
+
+    // Line 1
     for x in 0..DIM {
       // Check for entrance
       let opn_or_wal: &str = if *orientation && y == pos_entrance.y && x == 0 {
         ENT_SYMB
+      } else if x > 0 && maze[[y, x]] == 0 {
+        HEY_SYMB
       } else {
         WAL_SYMB
       };
 
       // This Fugly routine juggles between u8 codenames (nicely storable in a 2D array)...
       // ...and the desired corresponding strings (seemingly impossible to store)
-      let symb: &str = if symbol_code[[y, x]] == WAL_CODE {
+      let symb: &str = if symbol_code[[y, x]] == BUG_CODE {
+        BUG_SYMB
+      } else if symbol_code[[y, x]] == HEY_CODE {
+        HEY_SYMB
+      } else if symbol_code[[y, x]] == WAL_CODE {
         WAL_SYMB
       } else if symbol_code[[y, x]] == OPN_CODE {
         OPN_SYMB
@@ -412,52 +512,64 @@ fn print_maze_in_ascii(
 
 
 // ----------------------------------------------------------------
-fn  print_node_in_ascii(code: u8, line: u8, opn_or_wal: &str, symb: &str) {
+fn print_node_in_ascii(code: u8, line: u8, opn_or_wal: &str, symb: &str) {
 
+  // Glorious hack to print symbols in a semantically-specific color
   let colored_opn_or_wal = if opn_or_wal == ENT_SYMB {
     opn_or_wal.red()
   } else {
     opn_or_wal.normal()
   };
 
+  // Line 0
   if line == 0 {
-    if code == 1 {
+    if code == 0 {
+      print!("{}{}", WAL_SYMB, WAL_SYMB); // TODO ???
+    } else if code == HEY_CODE {
+      print!("{}{}", WAL_SYMB, HEY_SYMB); // TODO ???
+    } else if code == HEX_1_CODE {
       print!("{}{}", WAL_SYMB, colored_opn_or_wal);
-    } else if code == 2 {
+    } else if code == HEX_2_CODE {
       print!("{}{}", WAL_SYMB, colored_opn_or_wal);
-    } else if code == 3 {
+    } else if code == HEX_3_CODE {
       print!("{}{}", WAL_SYMB, colored_opn_or_wal);
-    } else if code == 4 {
+    } else if code == HEX_4_CODE {
       print!("{}{}", WAL_SYMB, colored_opn_or_wal);
-    } else if code == 5 {
+    } else if code == HEX_5_CODE {
       print!("{}{}", WAL_SYMB, colored_opn_or_wal);
-    } else if code == 6 {
+    } else if code == HEX_6_CODE {
       print!("{}{}", WAL_SYMB, colored_opn_or_wal);
-    } else if code == 7 {
+    } else if code == HEX_7_CODE {
       print!("{}{}", WAL_SYMB, colored_opn_or_wal);
-    } else if code == 8 {
+    } else if code == HEX_8_CODE {
       print!("{}{}", WAL_SYMB, OPN_SYMB);
-    } else if code == 9 {
+    } else if code == HEX_9_CODE {
       print!("{}{}", WAL_SYMB, OPN_SYMB);
-    } else if code == 10 {
+    } else if code == HEX_A_CODE {
       print!("{}{}", WAL_SYMB, OPN_SYMB);
-    } else if code == 11 {
+    } else if code == HEX_B_CODE {
       print!("{}{}", WAL_SYMB, OPN_SYMB);
-    } else if code == 12 {
+    } else if code == HEX_C_CODE {
       print!("{}{}", WAL_SYMB, OPN_SYMB);
-    } else if code == 13 {
+    } else if code == HEX_D_CODE {
       print!("{}{}", WAL_SYMB, OPN_SYMB);
-    } else if code == 14 {
+    } else if code == HEX_E_CODE {
       print!("{}{}", WAL_SYMB, OPN_SYMB);
-    } else if code == 15 {
+    } else if code == HEX_F_CODE {
       print!("{}{}", WAL_SYMB, OPN_SYMB);
     } else {
       panic!("Impossible code: {}", code);
     }
+
+  // Line 1
   } else if line == 1 {
 
-    // Glorious hack to print a symbol in a semantically-specific color
-    let colored_symb = if symb == NOD_SYMB {
+    // Glorious hack to print symbols in a semantically-specific color
+    let colored_symb = if symb == BUG_SYMB {
+      symb.red()
+    } else if symb == HEY_SYMB {
+      symb.yellow()
+    } else if symb == NOD_SYMB {
       symb.blue()
     } else if symb == ALV_SYMB {
       symb.yellow()
@@ -467,43 +579,48 @@ fn  print_node_in_ascii(code: u8, line: u8, opn_or_wal: &str, symb: &str) {
       symb.cyan()
     } else if symb == PATH_L2R_SYMB || symb == PATH_R2L_SYMB || symb == PATH_U2D_SYMB || symb == PATH_D2U_SYMB {
       symb.red()
-    } else if symb == HEX_1_SYMB || symb == HEX_2_SYMB || symb == HEX_3_SYMB || symb == HEX_4_SYMB || symb == HEX_5_SYMB ||
-      symb == HEX_6_SYMB || symb == HEX_7_SYMB || symb == HEX_8_SYMB || symb == HEX_9_SYMB ||
-      symb == HEX_A_SYMB || symb == HEX_B_SYMB || symb == HEX_C_SYMB || symb == HEX_D_SYMB || symb == HEX_E_SYMB || symb == HEX_F_SYMB {
+    } else if symb == HEX_1_SYMB || symb == HEX_2_SYMB || symb == HEX_3_SYMB || symb == HEX_4_SYMB ||
+      symb == HEX_5_SYMB || symb == HEX_6_SYMB || symb == HEX_7_SYMB || symb == HEX_8_SYMB ||
+      symb == HEX_9_SYMB || symb == HEX_A_SYMB || symb == HEX_B_SYMB || symb == HEX_C_SYMB ||
+      symb == HEX_D_SYMB || symb == HEX_E_SYMB || symb == HEX_F_SYMB {
       symb.green()
     } else {
       panic!("Impossible symbol: {}", symb);
     };
 
-    if code == 1 {
+    if code == 0 { // TODO ???
+      print!("{}{}", WAL_SYMB, BUG_SYMB.red()); // TODO ???
+    } else if code == HEY_CODE {
+      print!("{}{}", HEY_SYMB, BUG_SYMB.red()); // TODO ???
+    } else if code == HEX_1_CODE {
       print!("{}{}", colored_opn_or_wal, colored_symb);
-    } else if code == 2 {
+    } else if code == HEX_2_CODE {
       print!("{}{}", OPN_SYMB, colored_symb);
-    } else if code == 3 {
+    } else if code == HEX_3_CODE {
       print!("{}{}", OPN_SYMB, colored_symb);
-    } else if code == 4 {
+    } else if code == HEX_4_CODE {
       print!("{}{}", colored_opn_or_wal, colored_symb);
-    } else if code == 5 {
+    } else if code == HEX_5_CODE {
       print!("{}{}", colored_opn_or_wal, colored_symb);
-    } else if code == 6 {
+    } else if code == HEX_6_CODE {
       print!("{}{}", OPN_SYMB, colored_symb);
-    } else if code == 7 {
+    } else if code == HEX_7_CODE {
       print!("{}{}", OPN_SYMB, colored_symb);
-    } else if code == 8 {
+    } else if code == HEX_8_CODE {
       print!("{}{}", colored_opn_or_wal, colored_symb);
-    } else if code == 9 {
+    } else if code == HEX_9_CODE {
       print!("{}{}", colored_opn_or_wal, colored_symb);
-    } else if code == 10 {
+    } else if code == HEX_A_CODE {
       print!("{}{}", OPN_SYMB, colored_symb);
-    } else if code == 11 {
+    } else if code == HEX_B_CODE {
       print!("{}{}", OPN_SYMB, colored_symb);
-    } else if code == 12 {
+    } else if code == HEX_C_CODE {
       print!("{}{}", colored_opn_or_wal, colored_symb);
-    } else if code == 13 {
+    } else if code == HEX_D_CODE {
       print!("{}{}", colored_opn_or_wal, colored_symb);
-    } else if code == 14 {
+    } else if code == HEX_E_CODE {
       print!("{}{}", OPN_SYMB, colored_symb);
-    } else if code == 15 {
+    } else if code == HEX_F_CODE {
       print!("{}{}", OPN_SYMB, colored_symb);
     } else {
       panic!("Impossible code: {}", code);
@@ -515,74 +632,12 @@ fn  print_node_in_ascii(code: u8, line: u8, opn_or_wal: &str, symb: &str) {
 
 
 // ----------------------------------------------------------------
-fn create_wall_with_door(
-  maze: &mut Array2<u8>, wall_min: usize, wall_max: usize, door_min: usize, door_max: usize, orientation: &bool,
-  rng: &mut StdRng) {
-
-  /*
-  println!(
-    "---\norientation: {}, wall_min: {}, wall_max: {}, door_min: {}, door_max: {}",
-    orientation, wall_min, wall_max, door_min, door_max);
-  */
-
-  if wall_max > wall_min {
-    // Subdivision of the room
-
-    let pos_wall = rng.gen_range(wall_min..wall_max);
-    let pos_wall_plus_one = pos_wall +1;
-
-    let pos_door = if door_max > door_min {
-      rng.gen_range(door_min..door_max)
-    } else {
-      door_min
-    };
-
-    // Determine, in function of the current orientation, the door value and the next wall orientation
-    match orientation {
-      // vertical separation, horizontal move
-      true => {
-        maze[[pos_door, pos_wall]] += L2R;
-        maze[[pos_door, pos_wall +1]] += R2L;
-      },
-      // horizontal separation, vertical move
-      false => {
-        maze[[pos_wall, pos_door]] += U2D;
-        maze[[pos_wall +1, pos_door]] += D2U;
-      }
-    }
-
-    /*
-    // Display the intermediate steps
-    if SHOW_GENERATION_PROCESS {
-      let symbol_code = get_codenames_for_naked_maze();
-      print_maze_in_ascii(&maze, &orientation, &pos_entrance, &pos_goal, &symbol_code);
-    }
-    */
-
-    if door_max > door_min {
-    // Recursive call on two subdivided rooms with flipped orientation
-      create_wall_with_door(maze, door_min, door_max, wall_min, pos_wall, &!orientation, rng);
-      create_wall_with_door(maze, door_min, door_max, pos_wall_plus_one, wall_max, &!orientation, rng);
-    } else if door_max == door_min {
-      // Recursive call on two subdivided rooms with same orientation
-      create_wall_with_door(maze, wall_min, pos_wall, door_min, door_max, &orientation, rng);
-      create_wall_with_door(maze, pos_wall_plus_one, wall_max, door_min, door_max, &orientation, rng);
-    }
-
-  } else if wall_max == wall_min && door_max > door_min {
-    // Recursive call on the same room with flipped orientation
-    create_wall_with_door(maze, door_min, door_max, wall_min, wall_max, &!orientation, rng);
-  }
-
-  // Implicit stop condition: "wall_max == wall_min && door_max == door_min"
-
-}
-
-
-// ----------------------------------------------------------------
-// Each symbol {L2R, R2L, U2D, D2U} appears exactly eight times in the encoding scheme
-// The encoding scheme is made up fifteen different values ranging from 1 to 15
+// From a given code-value "maze[[pos.y, pos.x]] = a*L2R + b*R2L +c*U2D + d*D2U", s.t. {a, b, c, d} are boolean,...
+// ...retrieve the individual components {L2R, R2L, U2D, and/or D2U} and store them in the vector "possible_moves"
+// The encoding scheme consists of fifteen different values ranging from 1 to 15, describing the possible moves
 // No need to encode a "zero" symbol because this would correspond to a non-existing fully-closed unit-sized room
+// Interestingly, each symbol {L2R, R2L, U2D, D2U} appears exactly eight times in the encoding scheme
+// ----------------------------------------------------------------
 fn get_possible_moves(maze: &Array2<u8>, pos: &Pos) -> Vec<Pos> {
   let mut possible_moves = vec![];
   if maze[[pos.y, pos.x]] == L2R {
@@ -636,4 +691,76 @@ fn get_possible_moves(maze: &Array2<u8>, pos: &Pos) -> Vec<Pos> {
     panic!("Impossible move: {}", maze[[pos.y, pos.x]]);
   }
   possible_moves
+}
+
+
+// ----------------------------------------------------------------
+// The possible candidate moves from a given node have first been determined based on the presence of walls and/or doors
+// Here, the possible moves are further restricted to exclude candidate moves that do not land in the "far" region
+// ----------------------------------------------------------------
+fn refine_moves_based_on_far_region(mut candidate_moves: Vec<Pos>, far_region: &Array2<bool>) -> Vec<Pos> {
+  let mut idx = 0; // This index is different to the one used in the for loop so it can adapt when elements are removed
+  for _idx_bis in 0..candidate_moves.iter().len() {
+    if !far_region[[candidate_moves[idx].y, candidate_moves[idx].x]] {
+      candidate_moves.remove(idx); // Remove candidate moves that land in a region that was already explored
+    } else {
+      idx +=1;
+    }
+  }
+  candidate_moves
+}
+
+
+// ----------------------------------------------------------------
+// Prepare a lookup table of "codenames" so each node of the maze is associated with their corresponding ascii symbol
+// Here, the simple floorplan of the maze is displayed, therefore each node is represented by "NOD_SYMB"
+// ----------------------------------------------------------------
+fn get_codenames_for_naked_maze() -> Array2<u8> {
+  let mut codenames = Array2::<u8>::zeros((DIM, DIM));
+  for y in 0..DIM {
+    for x in 0..DIM {
+      codenames[[y, x]] = NOD_CODE;
+    }
+  }
+  codenames
+}
+
+
+// ----------------------------------------------------------------
+// Prepare a lookup table of "codenames" so each node of the maze is associated with their corresponding ascii symbol
+// Here, the current state of the front propagation is displayed, using "ALV_SYMB", "NAR_SYMB", or "FAR_SYMB"
+// ----------------------------------------------------------------
+fn get_codenames_for_alv_nar_far_regions(
+  alv_region: &Array2<bool>, nar_region: &Array2<bool>, far_region: &Array2<bool>) -> Array2<u8> {
+  let mut codenames = Array2::<u8>::zeros((DIM, DIM));
+  for y in 0..DIM {
+    for x in 0..DIM {
+      codenames[[y, x]] = if alv_region[[y, x]] {
+        ALV_CODE
+      } else if nar_region[[y, x]] {
+        NAR_CODE
+      } else if far_region[[y, x]] {
+        FAR_CODE
+      } else {
+        panic!("Impossible alv/nar/far configuration");
+      };
+    }
+  }
+  codenames
+}
+
+
+// ----------------------------------------------------------------
+// Count the number of "True" in a boolean vector
+// ----------------------------------------------------------------
+fn count_nb_of_true(alv_nar_far_array: &Array2<bool>) -> usize {
+  let mut nb_of_true = 0;
+  for x in 0..DIM {
+    for y in 0..DIM {
+      if alv_nar_far_array[[y, x]] == true {
+        nb_of_true +=1;
+      }
+    }
+  }
+  nb_of_true
 }
