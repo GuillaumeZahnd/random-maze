@@ -1,12 +1,24 @@
 # README
 
-![random_maze_art_01.jpg](../readme_images/art/random_maze_art_01.jpg?raw=true)
+![random_maze_art_01.jpg](../readme_images/random_maze_art_01.jpg?raw=true)
 
 ## Yes, but why?
 
 This repo is a toy project for me to play with an algorithm I know (front propagation) in a language I did not know (Rust).
 
-![random_maze_art_02.jpg](../readme_images/art/random_maze_art_02.jpg?raw=true)
+![random_maze_art_02.jpg](../readme_images/random_maze_art_02.jpg?raw=true)
+
+## Parameters
+
+```sh
+DIM                     := 7        // Size of the maze
+MAZE_ORIENTATION        := "random" // Maze orientation ("horizontal", "vertical", "random")
+SHOW_GENERATION_PROCESS := false    // Intermediate display of the maze generation steps
+SHOW_SOLVING_PROCESS    := false    // Intermediate display of the front propagation steps
+USE_FANCY_ASCII         := true     // Print in the console in ascii-art (either fancy, or pure)
+USE_RANDOM_SEED         := false    // Random seed for reproducibility
+SEED                    := 893      // Japanese speakers will know what this number stands for ;)
+```
 
 ## Algorithm to generate the maze
 
@@ -30,11 +42,11 @@ By construction the maze is an undirected acyclic graph, therefore the path from
 
 ##### Example of a 7x7 maze:
 
-![random_maze_art_03.jpg](../readme_images/art/random_maze_art_03.jpg?raw=true)
+![random_maze_art_03.jpg](../readme_images/random_maze_art_03.jpg?raw=true)
 
 ##### Example of the four first iterations during the random generation process:
 
-![random_maze_art_04.jpg](../readme_images/art/random_maze_art_04.jpg?raw=true)
+![random_maze_art_04.jpg](../readme_images/random_maze_art_04.jpg?raw=true)
 
 ## Algorithm to encode the possible moves
 
@@ -56,7 +68,7 @@ The advantage of using this encoding is that we can exploit additions of terms i
 
 ##### All sixteen different code-words, derived from adding terms of the basis ```{L2R, R2L, U2D, D2U}```:
 
-![random_maze_art_05.jpg](../readme_images/art/random_maze_art_05.jpg?raw=true)
+![random_maze_art_05.jpg](../readme_images/random_maze_art_05.jpg?raw=true)
 
 With this information, we can elaborate the description of the algorithm ```generate_maze``` with further details:
 
@@ -80,7 +92,7 @@ Ultimately, the maze is effectively built by adding connection between specific 
 
 ##### Example of the code-words for each node in the fully-generated 7x7 maze:
 
-![random_maze_art_06.jpg](../readme_images/art/random_maze_art_06.jpg?raw=true)
+![random_maze_art_06.jpg](../readme_images/random_maze_art_06.jpg?raw=true)
 
 ## Algorithm to solve the maze
 
@@ -122,11 +134,11 @@ end
 
 ##### Example of the fully-propagated 7x7 maze:
 
-![random_maze_art_07.jpg](../readme_images/art/random_maze_art_07.jpg?raw=true)
+![random_maze_art_07.jpg](../readme_images/random_maze_art_07.jpg?raw=true)
 
 ##### Example of the four first iterations during the front propagation process:
 
-![random_maze_art_08.jpg](../readme_images/art/random_maze_art_08.jpg?raw=true)
+![random_maze_art_08.jpg](../readme_images/random_maze_art_08.jpg?raw=true)
 
 ### Backtracking algorithm
 
@@ -166,7 +178,7 @@ path := Empty
 
 ##### Example of the fully-solved maze showing the path from ```E``` to ```G```:
 
-![random_maze_art_09.jpg](../readme_images/art/random_maze_art_09.jpg?raw=true)
+![random_maze_art_09.jpg](../readme_images/random_maze_art_09.jpg?raw=true)
 
 ##### Path from ```E``` to ```G```:
 
@@ -196,7 +208,7 @@ I was not satisfied with the (currently available) plotting functionalities offe
 
 ##### Example of the display for a single node:
 
-![random_maze_art_10.jpg](../readme_images/art/random_maze_art_10.jpg?raw=true)
+![random_maze_art_10.jpg](../readme_images/random_maze_art_10.jpg?raw=true)
 
 ##### Example of the process to print a ```NxN``` maze in the console
 
@@ -210,3 +222,7 @@ I was not satisfied with the (currently available) plotting functionalities offe
 | print this line --> | **Row N, Line 0** | W_0.N, X_0.N | W_1.N, X_1.N | ... | W_N.N, X_N.N | Wall |
 | print this line --> | **Row N, Line 1** | Y_0.N, Z_0.N | Y_1.N, Z_1.N | ... | Y_N.N, Z_N.N | Wall |
 | print this line --> | **Closing symbols** | Wall, Wall | Wall, Wall | ... | Wall, Wall | Wall |
+
+## Some random 7x7 mazes
+
+![random_maze_art_11.jpg](../readme_images/random_maze_art_11.jpg?raw=true)
